@@ -1,93 +1,82 @@
-"""Simple browser: use PyQt GUI when available, otherwise open system browser.
-
-The GUI requires PyQt6 and PyQt6-WebEngine plus system graphics support.
-If those are missing or a runtime graphics error occurs, this script will
-open the default system browser to a default URL and print instructions.
-"""
-
 import sys
-import webbrowser
-
-DEFAULT_URL = "https://google.com"
-
-try:
-    # Try to import PyQt GUI components
-    from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QLineEdit, QPushButton
-    from PyQt6.QtWebEngineWidgets import QWebEngineView
-    from PyQt6.QtCore import QUrl
-
-    class SimpleBrowser(QMainWindow):
-        def __init__(self):
-            super().__init__()
-            self.setWindowTitle("Simple Web Browser")
-            self.setGeometry(100, 100, 1000, 700)
-
-            # Create central widget
-            central = QWidget()
-            layout = QVBoxLayout()
-
-            # URL bar
-            bar_layout = QHBoxLayout()
-            self.url_bar = QLineEdit()
-            self.url_bar.setText(DEFAULT_URL)
-            self.url_bar.returnPressed.connect(self.navigate)
-            bar_layout.addWidget(self.url_bar)
-
-            go_btn = QPushButton("Go")
-            go_btn.clicked.connect(self.navigate)
-            bar_layout.addWidget(go_btn)
-
-            layout.addLayout(bar_layout)
-
-            # Web view
-            self.browser = QWebEngineView()
-            layout.addWidget(self.browser)
-
-            central.setLayout(layout)
-            self.setCentralWidget(central)
-
-            # Load home page
-            self.navigate()
-
-        def navigate(self):
-            url = self.url_bar.text()
-            if not url.startswith(("http://", "https://")):
-                url = "https://" + url
-            self.browser.setUrl(QUrl(url))
-            self.url_bar.setText(url)
-
-    def run_gui():
-        app = QApplication(sys.argv)
-        browser = SimpleBrowser()
-        browser.show()
-        sys.exit(app.exec())
-
-except Exception as e_import:
-    # Import failed (missing PyQt or other import-time error)
-    run_gui = None
-    import_error = e_import
+from PyQt6.QtWidgets import QApplication, QMainWindow, QLineEdit, QToolBar, QAction
+from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtCore import QUrl
 
 
-def fallback_open_system_browser(reason_message: str):
-    """Open the default system browser and print helpful instructions."""
-    print("⚠ GUI unavailable:", reason_message)
-    print("Opening default system browser to:", DEFAULT_URL)
-    try:
-        webbrowser.open(DEFAULT_URL)
-    except Exception:
-        print("Could not open system browser automatically.")
-    print("\nIf you want the GUI version, install dependencies:")
-    print("  python -m pip install -r requirements.txt")
-    print("On Windows you may also need the Microsoft Visual C++ Redistributable.")
+class SimpleBrowser(QMainWindow):
+    """Minimal single-window web browser using PyQt6.
+
+    Requirements:
+      - PyQt6
+      - PyQt6-WebEngine
+    """
+
+    def __init__(self, homepage: str = "https://www.google.com"):
+        super().__init__()
+        self.setWindowTitle("Simple Web Browser")
+        self.setGeometry(80, 80, 1200, 800)
+
+        # Web view
+        self.view = QWebEngineView()
+        self.setCentralWidget(self.view)
+
+        # Toolbar
+        toolbar = QToolBar()
+        self.addToolBar(toolbar)
+
+        back_action = QAction("Back", self)
+        back_action.triggered.connect(self.view.back)
+        toolbar.addAction(back_action)
+
+        forward_action = QAction("Forward", self)
+        forward_action.triggered.connect(self.view.forward)
+        toolbar.addAction(forward_action)
+
+        reload_action = QAction("Reload", self)
+        reload_action.triggered.connect(self.view.reload)
+        toolbar.addAction(reload_action)
+
+        home_action = QAction("Home", self)
+        home_action.triggered.connect(lambda: self.navigate_to(homepage))
+        toolbar.addAction(home_action)
+
+        # Address bar
+        self.address = QLineEdit()
+        self.address.returnPressed.connect(self.on_enter_address)
+        toolbar.addWidget(self.address)
+
+        # Go button
+        go_action = QAction("Go", self)
+        go_action.triggered.connect(self.on_enter_address)
+        toolbar.addAction(go_action)
+
+        # Update address when page changes
+        self.view.urlChanged.connect(self.update_address)
+
+        # Load homepage
+        self.navigate_to(homepage)
+
+    def on_enter_address(self):
+        url_text = self.address.text().strip()
+        if not url_text:
+            return
+        if not url_text.startswith(("http://", "https://")):
+            url_text = "https://" + url_text
+        self.navigate_to(url_text)
+
+    def navigate_to(self, url: str):
+        qurl = QUrl(url)
+        if not qurl.isValid():
+            qurl = QUrl("https://" + url)
+        self.view.setUrl(qurl)
+
+    def update_address(self, qurl: QUrl):
+        self.address.setText(qurl.toString())
 
 
 if __name__ == "__main__":
-    # If GUI run function is available, try to run it; otherwise fallback.
-    if run_gui is not None:
-        try:
-            run_gui()
-        except Exception as e_runtime:
-            # Could be a graphics/runtime error (e.g., libGL on Linux, or other)
-            fallback_open_system_browser(str(e_runtime))
-    else:
-        fallback_open_system_browser(str(import_error))
+    app = QApplication(sys.argv)
+    win = SimpleBrowser()
+    win.show()
+    sys.exit(app.exec())
